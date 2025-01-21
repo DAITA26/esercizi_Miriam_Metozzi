@@ -28,33 +28,41 @@ class DataDiNascita:
     def __init__(self, data, sesso):
         self.data = data
         self.sesso = sesso.upper()
-        giorni_mesi = {
+        self.mesi_lettere = {
             "01": "A", "02": "B", "03": "C", "04": "D", "05": "E", "06": "H",
             "07": "L", "08": "M", "09": "P", "10": "R", "11": "S", "12": "T"
         }
-        giorno = self.data[:2]
+    def calcola_codice(self):
+        giorno = int(self.data[:2])
         mese = self.data[3:5]
         anno = self.data[6:10]
-
-        self.anno_codice = str(int(anno) % 100).zfill(2)  # Assicura due cifre
-        self.giorno_codice = int(giorno) + 40 if self.sesso == "F" else giorno
-        self.mese_codice = giorni_mesi[mese]
-
+        anno_codice = str(int(anno) % 100).zfill(2)
+        giorno_codice = giorno + 40 if self.sesso == "F" else giorno
+        return anno_codice, self.mesi_lettere[mese], str(giorno_codice).zfill(2)
 
 
 # gestione comune di nascita
 class ComuneDiNascita:
-    def __init__(self, comune):
+    def __init__(self, comune, file_codici="codici_catastali.txt"):
         self.comune = comune.upper()
-        self.codici_catastali = {
-            "TORINO": "L219", "ROMA": "H501", "MILANO": "F205", "BRESCIA": "B157", "NAPOLI": "F839",
-            "BARI": "A662", "VENEZIA": "I312", "GENOVA": "D627", "MARINO": "E958", "CATANZARO": "B547",
-            "ANCONA": "A269", "FIRENZE": "D612", "PARIGI": "P001", "LONDRA": "L002", "NEW YORK": "NY01",
-            "AVEZZANO" : "A515"
-        }
+        self.file_codici = file_codici
+        self.codici_catastali = self.leggi_codici_catastali()
 
-    def get_codici_catastali(self):
-        return self.codici_catastali[self.comune]
+    def leggi_codici_catastali(self):
+        codici = {}
+        try:
+            with open(self.file_codici, "r", encoding="utf-8") as file:
+                for linea in file:
+                    parti = linea.strip().split(";")
+                    if len(parti) == 2:
+                        comune, codice = parti
+                        codici[comune.upper()] = codice
+        except FileNotFoundError:
+            print(f"Errore: Il file {self.file_codici} non è stato trovato.")
+        return codici
+
+    def codice_catastale(self):
+        return self.codici_catastali.get(self.comune, "XXXX")
 
 
 class CarattereDiControllo:
@@ -89,24 +97,30 @@ class CarattereDiControllo:
 
 
 # funzione per generare il codice fiscale
-def genera_codice_fiscale():
-    cognome = input("Inserisci il cognome: ")
+class CodiceFiscale:
+    def __init__(self, nome, cognome, data_nascita, comune, sesso):
+        self.nome = StringaDiTesto(nome)
+        self.cognome = StringaDiTesto(cognome)
+        self.data_nascita = DataDiNascita(data_nascita, sesso)
+        self.comune = ComuneDiNascita(comune)
+
+    def genera_codice_fiscale(self):
+        anno, mese, giorno = self.data_nascita.calcola_codice()
+        codice_base = (
+            self.cognome.risStringa(tipo="cognome") +
+            self.nome.risStringa(tipo="nome") +
+            anno + mese + giorno + self.comune.codice_catastale()
+        )
+        carattere_controllo = CarattereDiControllo(codice_base).calcola()
+        return codice_base + carattere_controllo
+
+
+if __name__ == "__main__":
     nome = input("Inserisci il nome: ")
-    data_nascita = input("Inserisci la data di nascita (GG/MM/AAAA): ")
-    sesso = input("Inserisci il sesso (M/F): ")
+    cognome = input("Inserisci il cognome: ")
+    data_nascita = input("Inserisci la data di nascita (DD/MM/YYYY): ")
     comune = input("Inserisci il comune di nascita: ")
+    sesso = input("Inserisci il sesso (M/F): ")
 
-    cognome_cod = StringaDiTesto(cognome).risStringa(tipo="cognome")
-    nome_cod = StringaDiTesto(nome).risStringa(tipo="nome")
-    data_nascita_obj = DataDiNascita(data_nascita, sesso)
-    comune_cod = ComuneDiNascita(comune).get_codici_catastali()
-
-    codice_base = f"{cognome_cod}{nome_cod}{data_nascita_obj.anno_codice}{data_nascita_obj.mese_codice}{str(data_nascita_obj.giorno_codice).zfill(2)}{comune_cod}"
-    carattere_speciale = CarattereDiControllo(codice_base).calcola()
-    codice_fiscale = codice_base + carattere_speciale
-
-
-    print(f"Codice fiscale generato: {codice_fiscale}")
-
-# Avvio della generazione del codice fiscale
-genera_codice_fiscale()
+    codice_fiscale = CodiceFiscale(nome, cognome, data_nascita, comune, sesso)
+    print("Il codice fiscale generato è:", codice_fiscale.genera_codice_fiscale())
